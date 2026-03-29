@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мир Функций — Погружение в математику</title>
+    <link rel="stylesheet" href="./grafkl.css">
+</head>
+<body>
+
+    <header>
+        <div class="container">
+            <h1>Мир Функций</h1>
+            <nav><ul><li><a href="./index.html">Главная</a></li></ul></nav>
+        </div>
+    </header>
+
+<main class="container">
+    <div class="constructor-layout">
+        <aside class="controls-panel">
+            <h3>Настройки функций</h3>
+            <div id="functionsList"></div>
+            <button class="btn-add" onclick="addFunction()">+ Добавить функцию</button>
+            <button class="btn-reset" onclick="resetView()">🔄 Сбросить вид</button>
+            <button class="btn-danger" onclick="fullReset()">🗑️ Сбросить всё</button>
+            
+            <div class="hint">
+                🖱️ <b>Колесо:</b> Масштаб (зум)<br>
+                🖱️ <b>Зажать ЛКМ:</b> Переместить график
+            </div>
+        </aside>
+
+        <div class="canvas-container" id="container">
+            <canvas id="graph"></canvas>
+        </div>
+    </div>
+</main>
+
+<script>
+    const canvas = document.getElementById('graph');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('container');
+    const listContainer = document.getElementById('functionsList');
+
+    let scale = 40; 
+    let offsetX = 0;
+    let offsetY = 0;
+    let isDragging = false;
+    let lastMouseX, lastMouseY;
+
+    // Палитра и счетчик цветов
+    const COLORS = ['#007bff', '#28a745', '#dc3545', '#fd7e14', '#6f42c1', '#20c997', '#e83e8c'];
+    let colorStep = 0; 
+
+    const paramsConfig = {
+        linear: ['a', 'b'],
+        quadratic: ['a', 'b', 'c'],
+        power: ['a', 'b'],
+        hyperbola: ['a', 'b'],
+        sin: ['a', 'b'],
+        cos: ['a', 'b']
+    };
+
+    let functions = [
+        { id: Date.now(), type: 'linear', a: 1, b: 0, c: 0, color: COLORS[0] }
+    ];
+    colorStep = 1; // Первый цвет уже занят
+
+    function fullReset() {
+        scale = 40;
+        offsetX = 0;
+        offsetY = 0;
+        colorStep = 0;
+        functions = [{
+            id: Date.now(),
+            type: 'linear',
+            a: 1,
+            b: 0,
+            c: 0,
+            color: COLORS[0]
+        }];
+        colorStep = 1;
+        renderList();
+        draw();
+    }
+
+    function addFunction() {
+        // Рациональное исправление: используем циклический счетчик, который не зависит от длины массива
+        const color = COLORS[colorStep % COLORS.length];
+        colorStep++;
+
+        functions.push({
+            id: Date.now(),
+            type: 'linear', a: 1, b: 0, c: 0,
+            color: color
+        });
+        renderList();
+        draw();
+    }
+
+    function removeFunction(id) {
+        if (functions.length > 1) {
+            functions = functions.filter(f => f.id !== id);
+            renderList();
+            draw();
+        }
+    }
+
+    function resetView() {
+        scale = 40; offsetX = 0; offsetY = 0;
+        draw();
+    }
+
+    function updateFunc(id, prop, val) {
+        const f = functions.find(f => f.id === id);
+        if (f) {
+            f[prop] = prop === 'type' ? val : parseFloat(val);
+            if(prop === 'type') renderList(); 
+            draw();
+        }
+    }
+
+    function renderList() {
+        const list = document.getElementById('functionsList');
+        list.innerHTML = '';
+        functions.forEach(f => {
+            const item = document.createElement('div');
+            item.className = 'func-item';
+            item.style.borderLeft = `5px solid ${f.color}`;
+            
+            const activeParams = paramsConfig[f.type];
+            let controlsHtml = `
+                <button class="btn-del" onclick="removeFunction(${f.id})">✕</button>
+                <div class="control-group">
+                    <select onchange="updateFunc(${f.id}, 'type', this.value)">
+                        <option value="linear" ${f.type==='linear'?'selected':''}>Прямая: ax + b</option>
+                        <option value="quadratic" ${f.type==='quadratic'?'selected':''}>Парабола: ax² + bx + c</option>
+                        <option value="hyperbola" ${f.type==='hyperbola'?'selected':''}>Гипербола: a/x + b</option>
+                        <option value="power" ${f.type==='power'?'selected':''}>Степенная: x^a + b</option>
+                        <option value="sin" ${f.type==='sin'?'selected':''}>Синус: a * sin(x) + b</option>
+                        <option value="cos" ${f.type==='cos'?'selected':''}>Косинус: a * cos(x) + b</option>
+                    </select>
+                </div>`;
+
+            ['a', 'b', 'c'].forEach(p => {
+                if (activeParams.includes(p)) {
+                    const label = p.toUpperCase();
+                    const step = p === 'a' ? 0.1 : 1;
+                    
+                    // Стандартные границы
+                    let min = p === 'a' ? -10 : -50;
+                    let max = p === 'a' ? 10 : 50;
+
+                    // ДИНАМИЧЕСКАЯ КОРРЕКЦИЯ: если значение в памяти больше границ, расширяем их
+                    if (f[p] < min) min = f[p];
+                    if (f[p] > max) max = f[p];
+
+                    const rangeId = `range${label}${f.id}`;
+                    const numId = `num${label}${f.id}`;
+                    const textId = `val${label}${f.id}`;
+
+                    controlsHtml += `
+                    <div class="control-group">
+                        <label>Параметр ${label}: <span id="${textId}">${f[p]}</span></label>
+                        <div class="flex-row">
+                            <input type="range" id="${rangeId}" min="${min}" max="${max}" step="${step}" value="${f[p]}" 
+                                oninput="document.getElementById('${numId}').value=this.value; 
+                                         document.getElementById('${textId}').innerText=this.value; 
+                                         updateFunc(${f.id}, '${p}', this.value)">
+                            <input type="number" id="${numId}" value="${f[p]}" step="${step}" 
+                                oninput="let r=document.getElementById('${rangeId}'); 
+                                         if(parseFloat(this.value) > r.max) r.max=this.value; 
+                                         if(parseFloat(this.value) < r.min) r.min=this.value; 
+                                         r.value=this.value; 
+                                         document.getElementById('${textId}').innerText=this.value; 
+                                         updateFunc(${f.id}, '${p}', this.value)">
+                        </div>
+                    </div>`;
+                }
+            });
+
+            item.innerHTML = controlsHtml;
+            list.appendChild(item);
+        });
+    }
+
+    function calculateY(f, x) {
+        switch(f.type) {
+            case 'linear': return f.a * x + f.b;
+            case 'quadratic': return f.a * x * x + f.b * x + f.c;
+            case 'power': return Math.pow(x, f.a) + f.b;
+            case 'hyperbola': return (Math.abs(x) < 0.001) ? NaN : (f.a / x) + f.b;
+            case 'sin': return f.a * Math.sin(x) + f.b;
+            case 'cos': return f.a * Math.cos(x) + f.b;
+            default: return 0;
+        }
+    }
+
+    function drawGrid(cx, cy) {
+        const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 500, 1000];
+        let stepUnit = steps.find(s => s * scale >= 60) || 1000;
+        ctx.strokeStyle = '#eef2f7'; ctx.lineWidth = 1; ctx.font = "11px Arial"; ctx.fillStyle = "#99aab5";
+
+        let xStart = Math.floor(-cx / (scale * stepUnit)) * stepUnit;
+        let xEnd = Math.ceil((canvas.width - cx) / (scale * stepUnit)) * stepUnit;
+        for (let i = xStart; i <= xEnd; i += stepUnit) {
+            let px = cx + i * scale;
+            ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height); ctx.stroke();
+            if (Math.abs(i) > 0.0001) ctx.fillText(Number(i.toFixed(2)), px + 2, cy + 15);
+        }
+
+        let yStart = Math.floor((cy - canvas.height) / (scale * stepUnit)) * stepUnit;
+        let yEnd = Math.ceil(cy / (scale * stepUnit)) * stepUnit;
+        for (let i = yStart; i <= yEnd; i += stepUnit) {
+            let py = cy - i * scale;
+            ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); ctx.stroke();
+            if (Math.abs(i) > 0.0001) ctx.fillText(Number(i.toFixed(2)), cx + 5, py - 2);
+        }
+
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath();
+        ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height); ctx.stroke();
+        ctx.fillText("0", cx + 5, cy + 15);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const cx = canvas.width / 2 + offsetX;
+        const cy = canvas.height / 2 + offsetY;
+        drawGrid(cx, cy);
+
+        functions.forEach(f => {
+            ctx.strokeStyle = f.color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            let first = true;
+
+            for (let px = 0; px <= canvas.width; px++) {
+                const x = (px - cx) / scale;
+                let y = calculateY(f, x);
+                const py = cy - y * scale;
+
+                // Разрыв для гиперболы в нуле
+                if (f.type === 'hyperbola' && ((x < 0 && (x + 1/scale) >= 0) || (x > 0 && (x - 1/scale) <= 0))) {
+                    first = true;
+                }
+
+                if (py < -3000 || py > canvas.height + 3000 || isNaN(py)) {
+                    first = true; continue;
+                }
+
+                if (first) { ctx.moveTo(px, py); first = false; }
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        });
+    }
+
+    container.onmousedown = (e) => { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; };
+    window.onmousemove = (e) => {
+        if (!isDragging) return;
+        offsetX += e.clientX - lastMouseX;
+        offsetY += e.clientY - lastMouseY;
+        lastMouseX = e.clientX; lastMouseY = e.clientY;
+        draw();
+    };
+    window.onmouseup = () => isDragging = false;
+    container.onwheel = (e) => {
+        e.preventDefault();
+        scale *= (e.deltaY < 0 ? 1.1 : 0.9);
+        scale = Math.min(Math.max(scale, 0.01), 10000);
+        draw();
+    };
+
+    function resize() { canvas.width = container.clientWidth; canvas.height = container.clientHeight; draw(); }
+    window.onresize = resize;
+    renderList();
+    resize();
+</script>
+
+</body>
+</html>
