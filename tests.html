@@ -246,7 +246,16 @@
                 if (ans === userAnswers[i]) cls += " selected";
                 grid += `<div class="${cls}">${ans}</div>`;
             });
-            div.innerHTML = `<p><strong>${i+1}. ${item.q}</strong></p>${grid}</div>`;
+            const userAnswer = userAnswers[i];
+            let statusHtml = '';
+            if (userAnswer === null) {
+                statusHtml = '<span style="color: #ff8c00; font-weight: bold; margin-left: 10px;">Пропущено</span>';
+            } else if (userAnswer === item.cText) {
+                statusHtml = '<span style="color: #28a745; font-weight: bold; margin-left: 10px;">Верно</span>';
+            } else {
+                statusHtml = '<span style="color: #dc3545; font-weight: bold; margin-left: 10px;">Неверно</span>';
+            }
+            div.innerHTML = `<p><strong>${i+1}. ${item.q}</strong>${statusHtml}</p>${grid}</div>`;
             analysis.appendChild(div);
         });
     }
